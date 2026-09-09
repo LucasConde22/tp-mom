@@ -20,7 +20,9 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         pass
 
     def send(self, message):
-        pass
+        self.channel.basic_publish(exchange='',
+                                   routing_key=self.queue_name,
+                                   body=message)
 
     def close(self):
         self.connection.close()
