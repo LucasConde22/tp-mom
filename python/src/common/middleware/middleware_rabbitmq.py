@@ -43,14 +43,28 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
         self.routing_keys = routing_keys
         self.channel = self.connection.channel()
         self.channel.exchange_declare(
-            exchange=exchange_name,
+                    exchange=exchange_name,
         )
 
+        self.queue_name = self.channel.queue_declare('').method.queue
+        self.channel.queue_bind(exchange=exchange_name, queue=self.queue_name)
+
     def start_consuming(self, on_message_callback):
-        pass
+        def callback(ch, method, properties, body):
+            on_message_callback(body,
+                                lambda: ch.basic_ack(method.delivery_tag),
+                                lambda: ch.basic_nack(method.delivery_tag))
+
+            self.channel.basic_consume(queue=self.queue_name,
+                                        auto_ack=False,
+                                        on_message_callback=callback)
+        self.channel.start_consuming()
 
     def stop_consuming(self):
-        pass
+        try:
+            self.channel.stop_consuming()
+        except:
+            pass
 
     def send(self, message):
         self.channel.basic_publish(exchange=self.exchange_name,
