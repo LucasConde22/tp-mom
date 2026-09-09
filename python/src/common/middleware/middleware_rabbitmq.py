@@ -1,8 +1,4 @@
-from multiprocessing.dummy import connection
-
 import pika
-import random
-import string
 from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange
 
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
@@ -36,6 +32,7 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         self.connection.close()
 
 class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
+    DIRECT_EXCHANGE_TYPE = 'direct'
     
     def __init__(self, host, exchange_name, routing_keys):
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
@@ -44,7 +41,7 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
         self.channel = self.connection.channel()
         self.channel.exchange_declare(
                     exchange=exchange_name,
-                    exchange_type='direct'
+                    exchange_type=__class__.DIRECT_EXCHANGE_TYPE
         )
 
         self.queue_name = self.channel\
