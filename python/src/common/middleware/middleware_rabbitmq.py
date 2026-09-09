@@ -44,10 +44,17 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
         self.channel = self.connection.channel()
         self.channel.exchange_declare(
                     exchange=exchange_name,
+                    exchange_type='direct'
         )
 
-        self.queue_name = self.channel.queue_declare('').method.queue
-        self.channel.queue_bind(exchange=exchange_name, queue=self.queue_name)
+        self.queue_name = self.channel\
+                                    .queue_declare('', exclusive=True)\
+                                    .method.queue
+
+        for routing_key in routing_keys:
+            self.channel.queue_bind(exchange=exchange_name,
+                                    queue=self.queue_name,
+                                    routing_key=routing_key)
 
     def start_consuming(self, on_message_callback):
         def callback(ch, method, properties, body):
@@ -55,21 +62,19 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
                                 lambda: ch.basic_ack(method.delivery_tag),
                                 lambda: ch.basic_nack(method.delivery_tag))
 
-            self.channel.basic_consume(queue=self.queue_name,
-                                        auto_ack=False,
-                                        on_message_callback=callback)
+        self.channel.basic_consume(queue=self.queue_name,
+                                    auto_ack=False,
+                                    on_message_callback=callback)
         self.channel.start_consuming()
 
     def stop_consuming(self):
-        try:
-            self.channel.stop_consuming()
-        except:
-            pass
+        self.channel.stop_consuming()
 
     def send(self, message):
-        self.channel.basic_publish(exchange=self.exchange_name,
-                                    routing_key=self.routing_keys,
-                                    body=message)
+        for key in self.routing_keys:
+            self.channel.basic_publish(exchange=self.exchange_name,
+                                       routing_key=key,
+                                       body=message)
 
     def close(self):
         self.connection.close()
