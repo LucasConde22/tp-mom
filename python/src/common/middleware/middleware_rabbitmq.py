@@ -1,5 +1,5 @@
 import pika
-from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange
+from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange, MessageMiddlewareCloseError
 
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
@@ -29,7 +29,11 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
                                    body=message)
 
     def close(self):
-        self.connection.close()
+        try:
+            if self.connection and self.connection.is_open:
+                self.connection.close()
+        except Exception as e:
+            raise MessageMiddlewareCloseError(e)
 
 class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
     DIRECT_EXCHANGE_TYPE = 'direct'
@@ -74,4 +78,8 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
                                        body=message)
 
     def close(self):
-        self.connection.close()
+        try:
+            if self.connection and self.connection.is_open:
+                self.connection.close()
+        except Exception as e:
+            raise MessageMiddlewareCloseError(e)
