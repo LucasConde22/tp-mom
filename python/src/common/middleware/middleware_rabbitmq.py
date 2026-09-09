@@ -1,6 +1,6 @@
 import pika
 import pika.exceptions
-from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange, MessageMiddlewareCloseError, MessageMiddlewareDisconnectedError
+from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange, MessageMiddlewareCloseError, MessageMiddlewareDisconnectedError, MessageMiddlewareMessageError
 
 # Errores que indican desconexión:
 DISCONNECTED_ERRORS = (
@@ -13,6 +13,7 @@ DISCONNECTED_ERRORS = (
 )
 
 MSG_ERROR_CLOSED_CONNECTION = 'The connection has already been closed'
+MSG_ERROR_CLOSED_CHANNEL = 'The channel is closed'
 
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
@@ -22,18 +23,33 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         self.channel = self.connection.channel()
         self.queue_name = queue_name
         self.channel.queue_declare(queue_name)
-    
+
     def start_consuming(self, on_message_callback):
+        if not self.connection or self.connection.is_closed:
+            raise MessageMiddlewareDisconnectedError(MSG_ERROR_CLOSED_CONNECTION)
+
+        if not self.channel or self.channel.is_closed:
+            raise MessageMiddlewareDisconnectedError(MSG_ERROR_CLOSED_CHANNEL)
+
         def callback(ch, method, properties, body):
             on_message_callback(body,
                                 lambda: ch.basic_ack(method.delivery_tag),
                                 lambda: ch.basic_nack(method.delivery_tag))
 
-        self.channel.basic_consume(queue=self.queue_name,
-                                   auto_ack=False,
-                                   on_message_callback=callback)
-        self.is_consuming = True
-        self.channel.start_consuming()
+        try:
+            self.channel.basic_consume(queue=self.queue_name,
+                                        auto_ack=False,
+                                        on_message_callback=callback)
+            self.is_consuming = True
+            self.channel.start_consuming()
+        except DISCONNECTED_ERRORS as e:
+            raise MessageMiddlewareDisconnectedError(e)
+        except Exception as e:
+            raise MessageMiddlewareMessageError(e)
+        finally:
+            # Como start_consuming es bloqueante, cuando llega a
+            # este punto es porque ya no está leyendo.
+            self.is_consuming = False
 
     def stop_consuming(self):
         if not self.is_consuming:
@@ -85,16 +101,29 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
                                     routing_key=routing_key)
 
     def start_consuming(self, on_message_callback):
+        if not self.connection or self.connection.is_closed:
+            raise MessageMiddlewareDisconnectedError(MSG_ERROR_CLOSED_CONNECTION)
+
+        if not self.channel or self.channel.is_closed:
+            raise MessageMiddlewareDisconnectedError(MSG_ERROR_CLOSED_CHANNEL)
+
         def callback(ch, method, properties, body):
             on_message_callback(body,
                                 lambda: ch.basic_ack(method.delivery_tag),
                                 lambda: ch.basic_nack(method.delivery_tag))
 
-        self.channel.basic_consume(queue=self.queue_name,
-                                    auto_ack=False,
-                                    on_message_callback=callback)
-        self.is_consuming = True
-        self.channel.start_consuming()
+        try:
+            self.channel.basic_consume(queue=self.queue_name,
+                                        auto_ack=False,
+                                        on_message_callback=callback)
+            self.is_consuming = True
+            self.channel.start_consuming()
+        except DISCONNECTED_ERRORS as e:
+            raise MessageMiddlewareDisconnectedError(e)
+        except Exception as e:
+            raise MessageMiddlewareMessageError(e)
+        finally:
+            self.is_consuming = False
 
     def stop_consuming(self):
         if not self.is_consuming:
