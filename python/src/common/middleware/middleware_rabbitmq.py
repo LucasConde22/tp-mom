@@ -39,6 +39,7 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
     
     def __init__(self, host, exchange_name, routing_keys):
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        self.exchange_name = exchange_name
         self.routing_keys = routing_keys
         self.channel = self.connection.channel()
         self.channel.exchange_declare(
@@ -52,7 +53,9 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
         pass
 
     def send(self, message):
-        pass
+        self.channel.basic_publish(exchange=self.exchange_name,
+                                    routing_key=self.routing_keys,
+                                    body=message)
 
     def close(self):
         self.connection.close()
