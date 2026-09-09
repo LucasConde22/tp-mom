@@ -14,10 +14,18 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         self.channel.queue_declare(queue_name)
     
     def start_consuming(self, on_message_callback):
-        pass
+        def callback(ch, method, properties, body):
+            on_message_callback(body,
+                                lambda: ch.basic_ack(method.delivery_tag),
+                                lambda: ch.basic_nack(method.delivery_tag))
+
+        self.channel.basic_consume(queue=self.queue_name,
+                                   auto_ack=False,
+                                   on_message_callback=callback)
+        self.channel.start_consuming()
 
     def stop_consuming(self):
-        pass
+        self.channel.stop_consuming()
 
     def send(self, message):
         self.channel.basic_publish(exchange='',
