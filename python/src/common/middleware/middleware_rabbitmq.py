@@ -1,10 +1,24 @@
 import pika
-from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange, MessageMiddlewareCloseError
+import pika.exceptions
+from .middleware import MessageMiddlewareQueue, MessageMiddlewareExchange, MessageMiddlewareCloseError, MessageMiddlewareDisconnectedError
+
+# Errores que indican desconexión:
+DISCONNECTED_ERRORS = (
+    pika.exceptions.AMQPConnectionError,
+    pika.exceptions.ConnectionClosed,
+    pika.exceptions.StreamLostError,
+    pika.exceptions.ChannelWrongStateError,
+    pika.exceptions.ConnectionWrongStateError,
+    pika.exceptions.IncompatibleProtocolError,
+)
+
+MSG_ERROR_CLOSED_CONNECTION = 'The connection has already been closed'
 
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
     def __init__(self, host, queue_name):
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        self.is_consuming = False
         self.channel = self.connection.channel()
         self.queue_name = queue_name
         self.channel.queue_declare(queue_name)
@@ -18,10 +32,22 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         self.channel.basic_consume(queue=self.queue_name,
                                    auto_ack=False,
                                    on_message_callback=callback)
+        self.is_consuming = True
         self.channel.start_consuming()
 
     def stop_consuming(self):
-        self.channel.stop_consuming()
+        if not self.is_consuming:
+            return
+        
+        if not self.connection or self.connection.is_closed:
+            raise MessageMiddlewareDisconnectedError(MSG_ERROR_CLOSED_CONNECTION)
+
+        try:
+            self.channel.stop_consuming()
+        except DISCONNECTED_ERRORS as e:
+            raise MessageMiddlewareDisconnectedError(e)
+        finally:
+            self.is_consuming = False
 
     def send(self, message):
         self.channel.basic_publish(exchange='',
@@ -40,6 +66,7 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
     
     def __init__(self, host, exchange_name, routing_keys):
         self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+        self.is_consuming = False
         self.exchange_name = exchange_name
         self.routing_keys = routing_keys
         self.channel = self.connection.channel()
@@ -66,10 +93,22 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
         self.channel.basic_consume(queue=self.queue_name,
                                     auto_ack=False,
                                     on_message_callback=callback)
+        self.is_consuming = True
         self.channel.start_consuming()
 
     def stop_consuming(self):
-        self.channel.stop_consuming()
+        if not self.is_consuming:
+            return
+        
+        if not self.connection or self.connection.is_closed:
+            raise MessageMiddlewareDisconnectedError(MSG_ERROR_CLOSED_CONNECTION)
+
+        try:
+            self.channel.stop_consuming()
+        except DISCONNECTED_ERRORS as e:
+            raise MessageMiddlewareDisconnectedError(e)
+        finally:
+            self.is_consuming = False
 
     def send(self, message):
         for key in self.routing_keys:
