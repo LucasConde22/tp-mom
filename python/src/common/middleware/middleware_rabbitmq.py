@@ -10,6 +10,7 @@ DISCONNECTED_ERRORS = (
     pika.exceptions.ChannelWrongStateError,
     pika.exceptions.ConnectionWrongStateError,
     pika.exceptions.IncompatibleProtocolError,
+    OSError, # Necesario por si el host que se pasa es inválido
 )
 
 MSG_ERROR_CLOSED_CONNECTION = 'The connection has already been closed'
@@ -107,19 +108,20 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
             self.channel.exchange_declare(
                         exchange=exchange_name,
                         exchange_type=__class__.DIRECT_EXCHANGE_TYPE)
+
+            self.queue_name = self.channel\
+                                        .queue_declare('', exclusive=True)\
+                                        .method.queue
+
+            for routing_key in routing_keys:
+                self.channel.queue_bind(exchange=exchange_name,
+                                        queue=self.queue_name,
+                                        routing_key=routing_key)
+            
         except DISCONNECTED_ERRORS as e:
             raise MessageMiddlewareDisconnectedError(e)
         except Exception as e:
             raise MessageMiddlewareMessageError(e)
-
-        self.queue_name = self.channel\
-                                    .queue_declare('', exclusive=True)\
-                                    .method.queue
-
-        for routing_key in routing_keys:
-            self.channel.queue_bind(exchange=exchange_name,
-                                    queue=self.queue_name,
-                                    routing_key=routing_key)
 
     def start_consuming(self, on_message_callback):
         self._assert_connection_is_open()
@@ -178,8 +180,8 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
             raise MessageMiddlewareCloseError(e)
 
     def _assert_connection_is_open(self):
-            if not self.connection or self.connection.is_closed:
-                raise MessageMiddlewareDisconnectedError(MSG_ERROR_CLOSED_CONNECTION)
+        if not self.connection or self.connection.is_closed:
+            raise MessageMiddlewareDisconnectedError(MSG_ERROR_CLOSED_CONNECTION)
     
     def _assert_channel_is_open(self):
         if not self.channel or self.channel.is_closed:
