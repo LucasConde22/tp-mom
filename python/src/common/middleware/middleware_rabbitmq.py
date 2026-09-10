@@ -18,11 +18,16 @@ MSG_ERROR_CLOSED_CHANNEL = 'The channel is closed'
 class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
 
     def __init__(self, host, queue_name):
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        self.is_consuming = False
-        self.channel = self.connection.channel()
-        self.queue_name = queue_name
-        self.channel.queue_declare(queue_name)
+        try:
+            self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+            self.is_consuming = False
+            self.channel = self.connection.channel()
+            self.queue_name = queue_name
+            self.channel.queue_declare(queue_name)
+        except DISCONNECTED_ERRORS as e:
+            raise MessageMiddlewareDisconnectedError(e)
+        except Exception as e:
+            raise MessageMiddlewareMessageError(e)
 
     def start_consuming(self, on_message_callback):
         self._assert_connection_is_open()
@@ -93,15 +98,19 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
     DIRECT_EXCHANGE_TYPE = 'direct'
     
     def __init__(self, host, exchange_name, routing_keys):
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
-        self.is_consuming = False
-        self.exchange_name = exchange_name
-        self.routing_keys = routing_keys
-        self.channel = self.connection.channel()
-        self.channel.exchange_declare(
-                    exchange=exchange_name,
-                    exchange_type=__class__.DIRECT_EXCHANGE_TYPE
-        )
+        try:
+            self.connection = pika.BlockingConnection(pika.ConnectionParameters(host))
+            self.is_consuming = False
+            self.exchange_name = exchange_name
+            self.routing_keys = routing_keys
+            self.channel = self.connection.channel()
+            self.channel.exchange_declare(
+                        exchange=exchange_name,
+                        exchange_type=__class__.DIRECT_EXCHANGE_TYPE)
+        except DISCONNECTED_ERRORS as e:
+            raise MessageMiddlewareDisconnectedError(e)
+        except Exception as e:
+            raise MessageMiddlewareMessageError(e)
 
         self.queue_name = self.channel\
                                     .queue_declare('', exclusive=True)\
