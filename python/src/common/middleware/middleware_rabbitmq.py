@@ -33,6 +33,7 @@ class _MessageMiddlewareRabbitMQ(MessageMiddleware):
                                 lambda: ch.basic_nack(method.delivery_tag))
 
         try:
+            self.channel.basic_qos(prefetch_count=1)
             self.channel.basic_consume(queue=self.queue_name,
                                         auto_ack=False,
                                         on_message_callback=callback)
