@@ -39,7 +39,7 @@ class _MessageMiddlewareRabbitMQ(MessageMiddleware):
                                         on_message_callback=callback)
             self.is_consuming = True
             self.channel.start_consuming()
-        except __class__._DISCONNECTED_ERRORS as e:
+        except self._DISCONNECTED_ERRORS as e:
             raise MessageMiddlewareDisconnectedError(e)
         except Exception as e:
             raise MessageMiddlewareMessageError(e)
@@ -53,10 +53,11 @@ class _MessageMiddlewareRabbitMQ(MessageMiddleware):
             return
         
         self._assert_connection_is_open()
+        self._assert_channel_is_open()
 
         try:
             self.channel.stop_consuming()
-        except __class__._DISCONNECTED_ERRORS as e:
+        except self._DISCONNECTED_ERRORS as e:
             raise MessageMiddlewareDisconnectedError(e)
         finally:
             self.is_consuming = False
@@ -73,18 +74,18 @@ class _MessageMiddlewareRabbitMQ(MessageMiddleware):
             self.channel.basic_publish(exchange=exchange,
                                        routing_key=routing_key,
                                        body=message)
-        except __class__._DISCONNECTED_ERRORS as e:
+        except self._DISCONNECTED_ERRORS as e:
             raise MessageMiddlewareDisconnectedError(e)
         except Exception as e:
             raise MessageMiddlewareMessageError(e)
 
     def _assert_connection_is_open(self):
         if not self.connection or self.connection.is_closed:
-            raise MessageMiddlewareDisconnectedError(__class__._MSG_ERROR_CLOSED_CONNECTION)
+            raise MessageMiddlewareDisconnectedError(self._MSG_ERROR_CLOSED_CONNECTION)
         
     def _assert_channel_is_open(self):
         if not self.channel or self.channel.is_closed:
-            raise MessageMiddlewareDisconnectedError(__class__._MSG_ERROR_CLOSED_CHANNEL)
+            raise MessageMiddlewareDisconnectedError(self._MSG_ERROR_CLOSED_CHANNEL)
 
 class MessageMiddlewareQueueRabbitMQ(_MessageMiddlewareRabbitMQ, MessageMiddlewareQueue):
     def __init__(self, host, queue_name):
@@ -92,7 +93,7 @@ class MessageMiddlewareQueueRabbitMQ(_MessageMiddlewareRabbitMQ, MessageMiddlewa
             super().__init__(host)
             self.queue_name = queue_name
             self.channel.queue_declare(queue_name)
-        except __class__._DISCONNECTED_ERRORS as e:
+        except self._DISCONNECTED_ERRORS as e:
             raise MessageMiddlewareDisconnectedError(e)
         except Exception as e:
             raise MessageMiddlewareMessageError(e)
@@ -112,7 +113,7 @@ class MessageMiddlewareExchangeRabbitMQ(_MessageMiddlewareRabbitMQ, MessageMiddl
             self.routing_keys = routing_keys
             self.channel.exchange_declare(
                         exchange=exchange_name,
-                        exchange_type=__class__._DIRECT_EXCHANGE_TYPE)
+                        exchange_type=self._DIRECT_EXCHANGE_TYPE)
 
             self.queue_name = self.channel\
                                         .queue_declare('', exclusive=True)\
@@ -123,7 +124,7 @@ class MessageMiddlewareExchangeRabbitMQ(_MessageMiddlewareRabbitMQ, MessageMiddl
                                         queue=self.queue_name,
                                         routing_key=routing_key)
             
-        except __class__._DISCONNECTED_ERRORS as e:
+        except self._DISCONNECTED_ERRORS as e:
             raise MessageMiddlewareDisconnectedError(e)
         except Exception as e:
             raise MessageMiddlewareMessageError(e)
